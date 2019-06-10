@@ -1,7 +1,7 @@
 //
 // Created by tianyang on 2018/11/5.
 //
-
+#include "link.h"
 #include <sys/types.h>
 #include <malloc.h>
 #include <stdio.h>
@@ -9,6 +9,8 @@
 #include <sys/mman.h>
 #include "pudge.h"
 #include "MSHook/Hooker.h"
+#include "ARM64/And64InlineHook.hpp"
+
 #define MAX_NAME_LEN 256
 #define MEMORY_ONLY  "[memory]"
 #define MMARRAYSIZE 1024*128
@@ -16,7 +18,7 @@
 
 typedef struct SymbolTab *P_SymbolTab;
 struct SymbolList {
-    Elf32_Sym *sym;       /* symbols */
+    ElfW(Sym) *sym;       /* symbols */
     char *str;            /* symbol strings */
     unsigned num;         /* number of symbols */
 };
@@ -34,9 +36,9 @@ int my_pread(int fd, void *buf, size_t count, off_t offset) {
     return read(fd, buf, count);
 }
 
-int lookupInternel(struct SymbolList *sl, unsigned char type, const char *name, unsigned int *val,
+int lookupInternel(struct SymbolList *sl, unsigned char type, const char *name, unsigned long *val,
                    unsigned int *size) {
-    Elf32_Sym *p;
+    ElfW(Sym) *p;
     int len;
     int i;
 
@@ -54,7 +56,7 @@ int lookupInternel(struct SymbolList *sl, unsigned char type, const char *name, 
     return 0;
 }
 
-struct SymbolList *getSymbolList(int fd, Elf32_Shdr *symh, Elf32_Shdr *strh) {
+struct SymbolList *getSymbolList(int fd, ElfW(Shdr) *symh, ElfW(Shdr) *strh) {
     struct SymbolList *sl, *ret;
     int rv;
 
@@ -64,14 +66,14 @@ struct SymbolList *getSymbolList(int fd, Elf32_Shdr *symh, Elf32_Shdr *strh) {
     sl->sym = NULL;
 
     /* sanity */
-    if (symh->sh_size % sizeof(Elf32_Sym)) {
+    if (symh->sh_size % sizeof(ElfW(Sym))) {
         //printf("elf_error\n");
         goto out;
     }
 
     /* symbol table */
-    sl->num = symh->sh_size / sizeof(Elf32_Sym);
-    sl->sym = (Elf32_Sym *) malloc(symh->sh_size);
+    sl->num = symh->sh_size / sizeof(ElfW(Sym));
+    sl->sym = (ElfW(Sym) *) malloc(symh->sh_size);
     rv = my_pread(fd, sl->sym, symh->sh_size, symh->sh_offset);
     if (0 > rv) {
         //perror("read");
@@ -102,10 +104,10 @@ struct SymbolList *getSymbolList(int fd, Elf32_Shdr *symh, Elf32_Shdr *strh) {
 int doLoad(int fd, P_SymbolTab symtab) {
     int rv;
     size_t size;
-    Elf32_Ehdr ehdr;
-    Elf32_Shdr *shdr = NULL, *p;
-    Elf32_Shdr *dynsymh, *dynstrh;
-    Elf32_Shdr *symh, *strh;
+    ElfW(Ehdr) ehdr;
+    ElfW(Shdr) *shdr = NULL, *p;
+    ElfW(Shdr) *dynsymh, *dynstrh;
+    ElfW(Shdr) *symh, *strh;
     char *shstrtab = NULL;
     int i;
     int ret = -1;
@@ -121,13 +123,13 @@ int doLoad(int fd, P_SymbolTab symtab) {
     if (strncmp(ELFMAG, (char *) ehdr.e_ident, SELFMAG)) { /* sanity */
         goto out;
     }
-    if (sizeof(Elf32_Shdr) != ehdr.e_shentsize) { /* sanity */
+    if (sizeof(ElfW(Shdr)) != ehdr.e_shentsize) { /* sanity */
         goto out;
     }
 
     /* section header table */
     size = ehdr.e_shentsize * ehdr.e_shnum;
-    shdr = (Elf32_Shdr *) malloc(size);
+    shdr = (ElfW(Shdr) *) malloc(size);
     rv = my_pread(fd, shdr, size, ehdr.e_shoff);
     if (0 > rv) {
         goto out;
@@ -253,8 +255,9 @@ int loadMemMap(pid_t pid, struct MemoryMap *mm, int *nmmp) {
     p = strtok(raw, "\n");
     m = mm;
     while (p) {
+        //LOGD("%s",p);
         /* parse current map line */
-        rv = sscanf(p, "%08lx-%08lx %*s %*s %*s %*s %s\n",
+        rv = sscanf(p, "%10lx-%10lx %*s %*s %*s %*s %s\n",
                     &start, &end, name);
 
         p = strtok(NULL, "\n");
@@ -354,7 +357,7 @@ P_SymbolTab loadSymbolTab(char *filename) {
     return symtab;
 }
 /* 根据P_SymbolTab 找到对应的符号 */
-int lookupSymbol(P_SymbolTab s, unsigned char type, const char *name, unsigned int *val,
+int lookupSymbol(P_SymbolTab s, unsigned char type, const char *name, unsigned long *val,
                  unsigned int *size) {
     if (s->dyn && lookupInternel(s->dyn, type, name, val, size))
         return 1;
@@ -371,15 +374,15 @@ int getSymbolOffset(const char *libName) {
         return 0;
     }
 
-    Elf32_Ehdr ehdr;
-    read(fd, &ehdr, sizeof(Elf32_Ehdr));
+    ElfW(Ehdr) ehdr;
+    read(fd, &ehdr, sizeof(ElfW(Ehdr)));
 
     unsigned long shdr_addr = ehdr.e_shoff;
     int shnum = ehdr.e_shnum;
     int shent_size = ehdr.e_shentsize;
     unsigned long stridx = ehdr.e_shstrndx;
 
-    Elf32_Shdr shdr;
+    ElfW(Shdr) shdr;
 
     // load string table
     lseek(fd, shdr_addr + stridx * shent_size, SEEK_SET);
@@ -396,8 +399,8 @@ int getSymbolOffset(const char *libName) {
     lseek(fd, shdr_addr, SEEK_SET);
 
     // In executable case， some entry_address and entry_offset does not match
-    uint32_t first_entry_addr = 0;
-    uint32_t first_entry_offset = 0;
+    ElfW(Addr) first_entry_addr = 0;
+    ElfW(Addr) first_entry_offset = 0;
     int j;
     for (j = 0; j < shnum; j++) {
         read(fd, &shdr, shent_size);
@@ -416,6 +419,56 @@ int getSymbolOffset(const char *libName) {
 bool available = true;
 struct MemoryMap *p_array_memmap = 0;
 int memmapCount = 0;
+
+long pudge::findFuncAddress(char *libSo, char *targetSymbol) {
+    if(!available){
+        return 0;
+    }
+    if(!p_array_memmap){
+        p_array_memmap = (struct MemoryMap *) malloc(MMARRAYSIZE * sizeof(struct MemoryMap));
+        if (loadMemMap(getpid(), p_array_memmap, &memmapCount)) {
+            available = false;
+            return 0;
+        }
+        LOGD("totalCount = %d", memmapCount);
+    }
+
+    char libName[1024];
+    unsigned long start;
+    if (!getTargetLibAddr(libSo, libName, sizeof(libName), &start, p_array_memmap, memmapCount)) {
+        return 0;
+    }
+    LOGD("find %s %lx", libName, start);
+
+    P_SymbolTab p_symbol = loadSymbolTab(libName);
+    if (!p_symbol) {
+        return 0;
+    }
+
+    unsigned long addr = 0;
+    unsigned int size = 0;
+    int result = lookupSymbol(p_symbol,STT_FUNC,targetSymbol,&addr,&size);
+    if(!result){
+        return 0;
+    }
+
+//    if(size >= 16){
+//        addr = addr + start;
+//    }
+    addr += start;
+//    char str[128];
+//    sprintf(str, "/system/lib/%s", libSo);
+    int offset = getSymbolOffset(libName);
+
+    LOGD("result addr:0x%lx size:%d offset:%d ",addr,size,offset);
+
+//    if(addr  && size > 0){
+//        Cydia::MSHookFunction((char*)addr-offset, newFunc,(oldFunc), targetSymbol);
+//        return 1;
+//    }
+
+    return addr - offset;
+}
 
 int pudge::hookFunction(char *libSo, char *targetSymbol, void *newFunc, void **oldFunc) {
     if(!available){
@@ -442,29 +495,36 @@ int pudge::hookFunction(char *libSo, char *targetSymbol, void *newFunc, void **o
         return 0;
     }
 
-    unsigned int addr = 0;
+    unsigned long addr = 0;
     unsigned int size = 0;
     int result = lookupSymbol(p_symbol,STT_FUNC,targetSymbol,&addr,&size);
     if(!result){
         return 0;
     }
 
-    if(size >= 16){
-        addr = addr + start;
-    }
-
-    char str[128];
-    sprintf(str, "/system/lib/%s", libSo);
-    int offset = getSymbolOffset(str);
-
+//    if(size >= 16){
+//        addr = addr + start;
+//    }
+    addr += start;
+//    char str[128];
+//    sprintf(str, "/system/lib/%s", libSo);
+    int offset = getSymbolOffset(libName);
     LOGD("result addr:0x%lx size:%d offset:%d ",addr,size,offset);
+
     if(addr  && size > 0){
+#if defined(__aarch64__)
+        A64HookFunction((char*)addr-offset, newFunc, oldFunc);
+        return 1;
+#else
         Cydia::MSHookFunction((char*)addr-offset, newFunc,(oldFunc), targetSymbol);
         return 1;
+#endif
+
     }
 
     return 0;
 }
+
 
 int pudge:: search(int addr, int target, int maxSearch) {
     int *p_addr = reinterpret_cast<int *>(addr);
@@ -477,4 +537,37 @@ int pudge:: search(int addr, int target, int maxSearch) {
         }
     }
     return -1;
+}
+
+int find_name(pid_t pid, char *name, char *libn, unsigned long *addr)
+{
+    struct MemoryMap mm[1000];
+    unsigned long libcaddr;
+    int nmm;
+    char libc[1024];
+
+    P_SymbolTab s;
+
+    if (0 > loadMemMap(pid, mm, &nmm)) {
+        LOGD("cannot read memory map\n");
+        return -1;
+    }
+    if (0 > getTargetLibAddr(libn, libc, sizeof(libc), &libcaddr, mm, nmm)) {
+        LOGD("cannot find lib: %s\n", libn);
+        return -1;
+    }
+    //log("lib: >%s<\n", libc)
+    s = loadSymbolTab(libc);
+    if (!s) {
+        LOGD("cannot read symbol table\n");
+        return -1;
+    }
+
+    unsigned int size = 0;
+    if (0 > lookupSymbol(s,STT_FUNC, name, addr,&size)) {
+        LOGD("cannot find function: %s\n", name);
+        return -1;
+    }
+    *addr += libcaddr;
+    return 0;
 }

@@ -13,11 +13,9 @@
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
 
 namespace pudge{
-
+    long findFuncAddress(char* libSo,char * targetSymbol);
     int hookFunction(char* libSo,char * targetSymbol,void * newFunc,void ** oldFunc);
-
     int search(int addr, int target, int maxSearch);
 }
-
 
 #endif //NATIVE_PUDGE_H

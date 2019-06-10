@@ -10,6 +10,15 @@ cmake_minimum_required(VERSION 3.4.1)
 # You can define multiple libraries, and CMake builds them for you.
 # Gradle automatically packages shared libraries with your APK.
 add_definitions(-Os)
+
+IF(${ANDROID_ABI} STREQUAL arm64-v8a)
+    MESSAGE("__aarch64__ is now")
+    aux_source_directory(src/main/cpp/ARM64 HOOK_SRCS)
+else()
+    MESSAGE("arm is now")
+    aux_source_directory(src/main/cpp/MSHook HOOK_SRCS)
+endif()
+
 add_library( # Sets the name of the library.
              pudge
 
@@ -17,14 +26,8 @@ add_library( # Sets the name of the library.
              SHARED
 
              # Provides a relative path to your source file(s).
-             src/main/cpp/MSHook/ARM.cpp
-             src/main/cpp/MSHook/x86.cpp
-             src/main/cpp/MSHook/x86_64.cpp
-             src/main/cpp/MSHook/Thumb.cpp
-             src/main/cpp/MSHook/Debug.cpp
-             src/main/cpp/MSHook/Hooker.cpp
-             src/main/cpp/MSHook/PosixMemory.cpp
              src/main/cpp/pudge.cpp
+             ${HOOK_SRCS}
              )
 
 # Searches for a specified prebuilt library and stores the path as a
