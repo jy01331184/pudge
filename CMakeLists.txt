@@ -9,7 +9,10 @@ cmake_minimum_required(VERSION 3.4.1)
 # or SHARED, and provides the relative paths to its source code.
 # You can define multiple libraries, and CMake builds them for you.
 # Gradle automatically packages shared libraries with your APK.
-add_definitions(-Os)
+add_definitions(-Oz)
+
+add_definitions(-fno-rtti)
+add_definitions(-fno-exceptions)
 
 IF(${ANDROID_ABI} STREQUAL arm64-v8a)
     MESSAGE("__aarch64__ is now")
@@ -27,6 +30,7 @@ add_library( # Sets the name of the library.
 
              # Provides a relative path to your source file(s).
              src/main/cpp/pudge.cpp
+             src/main/cpp/ptr.cpp
              ${HOOK_SRCS}
              )
 

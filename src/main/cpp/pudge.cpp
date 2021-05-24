@@ -5,8 +5,10 @@
 #include <sys/types.h>
 #include <malloc.h>
 #include <stdio.h>
+#include "string.h"
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <unistd.h>
 #include "pudge.h"
 #include "MSHook/Hooker.h"
 #include "ARM64/And64InlineHook.hpp"
@@ -408,6 +410,7 @@ int getSymbolOffset(const char *libName) {
         if (*((char *) &(string_table[name_idx])) != 0) {
             first_entry_addr = shdr.sh_addr;
             first_entry_offset = shdr.sh_offset;
+            LOGD("index %d addr=%p offset=%p",j,first_entry_addr,first_entry_offset);
             //LOGD("%s %s \n", libName, &(string_table[name_idx]));
             //LOGD("%s first_entry_addr = 0x%x  first_entry_offset = 0x%x \n", libName,first_entry_addr, first_entry_offset);
             break;
@@ -468,6 +471,18 @@ long pudge::findFuncAddress(char *libSo, char *targetSymbol) {
 //    }
 
     return addr - offset;
+}
+
+int pudge::hookFunction(void* oldFuncPtr,void * newFunc,void ** oldFunc){
+    if(oldFuncPtr  && newFunc){
+#if defined(__aarch64__)
+        A64HookFunction(oldFuncPtr, newFunc, oldFunc);
+        return 1;
+#else
+        Cydia::MSHookFunction(oldFuncPtr, newFunc,(oldFunc), "");
+        return 1;
+#endif
+    }
 }
 
 int pudge::hookFunction(char *libSo, char *targetSymbol, void *newFunc, void **oldFunc) {

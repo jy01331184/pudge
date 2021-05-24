@@ -14,8 +14,10 @@
 
 namespace pudge{
     long findFuncAddress(char* libSo,char * targetSymbol);
-    int hookFunction(char* libSo,char * targetSymbol,void * newFunc,void ** oldFunc);
+    int hookFunction(char* libSo,char* targetSymbol,void * newFunc,void ** oldFunc);
+    int hookFunction(void* oldFuncPtr,void * newFunc,void ** oldFunc);
     int search(int addr, int target, int maxSearch);
+    bool isGoodPtr(void* ptr);
 }
 
 #endif //NATIVE_PUDGE_H

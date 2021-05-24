@@ -36,6 +36,7 @@
 #if defined(__aarch64__)
 
 #include "And64InlineHook.hpp"
+#include "cstring"
 
 #define __attribute                __attribute__
 #define aligned(x)                 __aligned__(x)
@@ -68,26 +69,26 @@
 #endif // NDEBUG
 
 
-
+struct fix_info
+{
+    uint32_t *bp;
+    uint32_t  ls; // left-shift counts
+    uint32_t  ad; // & operand
+};
+struct insns_info
+{
+    union
+    {
+        uint64_t insu;
+        int64_t  ins;
+        void    *insp;
+    };
+    fix_info fmap[A64_MAX_REFERENCES];
+};
 typedef uint32_t *__restrict *__restrict instruction;
 typedef struct
 {
-    struct fix_info
-    {
-        uint32_t *bp;
-        uint32_t  ls; // left-shift counts
-        uint32_t  ad; // & operand
-    };
-    struct insns_info
-    {
-        union
-        {
-            uint64_t insu;
-            int64_t  ins;
-            void    *insp;
-        };
-        fix_info fmap[A64_MAX_REFERENCES];
-    };
+
     int64_t    basep;
     int64_t    endp;
     insns_info dat[A64_MAX_INSTRUCTIONS];
