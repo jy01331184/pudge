@@ -22,6 +22,8 @@ else()
     aux_source_directory(src/main/cpp/MSHook HOOK_SRCS)
 endif()
 
+aux_source_directory(src/main/cpp/xhook HOOK_SRCS)
+
 add_library( # Sets the name of the library.
              pudge
 
